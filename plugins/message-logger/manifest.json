@@ -1,0 +1,7 @@
+{
+  "name": "PersistentMessageLogger",
+  "description": "Logs deleted messages persistently. Media (images/videos) saved locally on device.",
+  "authors": [{ "name": "YourName", "id": "YourDiscordUserID" }],
+  "main": "index.js",
+  "hash": ""
+}
