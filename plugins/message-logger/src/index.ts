@@ -10,7 +10,29 @@ const RowManager = findByName("RowManager");
 
 import { storage } from "@vendetta/plugin";
 
+storage.nopk ??= false;
+storage.logs ??= {};
+
 patches.push(before("dispatch", FluxDispatcher, ([event]) => {
+  if (event.type === "LOAD_MESSAGES_SUCCESS") {
+    const saved = storage.logs[event.channelId];
+    if (!saved) return;
+    const channel = ChannelMessages.get(event.channelId);
+    setTimeout(() => {
+      for (const [id, msg] of Object.entries(saved)) {
+        if (channel?.get(id)) continue;
+        FluxDispatcher.dispatch({
+          type: "MESSAGE_CREATE",
+          channelId: event.channelId,
+          message: { ...msg, __vml_deleted: true },
+          optimistic: false,
+          isPushNotification: false,
+        });
+      }
+    }, 100);
+    return;
+  }
+
   if (event.type === "MESSAGE_DELETE") {
     if (event.__vml_cleanup) return event;
 
@@ -20,6 +42,25 @@ patches.push(before("dispatch", FluxDispatcher, ([event]) => {
 
     if (message.author?.id == "1") return event;
     if (message.state == "SEND_FAILED") return event;
+
+    const cid = message.channel_id;
+    const mid = message.id;
+    storage.logs[cid] ??= {};
+    storage.logs[cid][mid] = { ...message.toJS(), __vml_deleted: true };
+
+    storage.nopk && fetch(`https://api.pluralkit.me/v2/messages/${encodeURIComponent(message.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (message.id === data.original && !data.member?.keep_proxy) {
+          delete storage.logs[cid]?.[mid];
+          FluxDispatcher.dispatch({
+            type: "MESSAGE_DELETE",
+            id: message.id,
+            channelId: message.channel_id,
+            __vml_cleanup: true,
+          });
+        }
+      });
 
     return [{
       message: {
@@ -70,3 +111,5 @@ export const onUnload = () => {
     }
   }
 };
+
+export { default as settings } from "./settings";
