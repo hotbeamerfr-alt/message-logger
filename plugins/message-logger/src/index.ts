@@ -10,45 +10,7 @@ const RowManager = findByName("RowManager");
 
 import { storage } from "@vendetta/plugin";
 
-storage.nopk ??= false;
-storage.logs ??= {};
-
-function saveMessage(message) {
-  const cid = message.channel_id;
-  const mid = message.id;
-  storage.logs[cid] ??= {};
-  storage.logs[cid][mid] = { ...message.toJS(), __vml_deleted: true };
-}
-
-function removeMessage(channelId, messageId) {
-  if (!storage.logs[channelId]) return;
-  delete storage.logs[channelId][messageId];
-  if (!Object.keys(storage.logs[channelId]).length)
-    delete storage.logs[channelId];
-}
-
-function restoreMessages(channelId) {
-  const saved = storage.logs[channelId];
-  if (!saved) return;
-  const channel = ChannelMessages.get(channelId);
-  for (const [id, msg] of Object.entries(saved)) {
-    if (channel?.get(id)) continue;
-    FluxDispatcher.dispatch({
-      type: "MESSAGE_CREATE",
-      channelId,
-      message: { ...msg, __vml_deleted: true },
-      optimistic: false,
-      isPushNotification: false,
-    });
-  }
-}
-
 patches.push(before("dispatch", FluxDispatcher, ([event]) => {
-  if (event.type === "LOAD_MESSAGES_SUCCESS") {
-    setTimeout(() => restoreMessages(event.channelId), 100);
-    return;
-  }
-
   if (event.type === "MESSAGE_DELETE") {
     if (event.__vml_cleanup) return event;
 
@@ -58,22 +20,6 @@ patches.push(before("dispatch", FluxDispatcher, ([event]) => {
 
     if (message.author?.id == "1") return event;
     if (message.state == "SEND_FAILED") return event;
-
-    saveMessage(message);
-
-    storage.nopk && fetch(`https://api.pluralkit.me/v2/messages/${encodeURIComponent(message.id)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (message.id === data.original && !data.member?.keep_proxy) {
-          removeMessage(message.channel_id, message.id);
-          FluxDispatcher.dispatch({
-            type: "MESSAGE_DELETE",
-            id: message.id,
-            channelId: message.channel_id,
-            __vml_cleanup: true,
-          });
-        }
-      });
 
     return [{
       message: {
@@ -124,5 +70,3 @@ export const onUnload = () => {
     }
   }
 };
-
-export { default as settings } from "./settings";
