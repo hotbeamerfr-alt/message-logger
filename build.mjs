@@ -1,32 +1,54 @@
-import { build } from "esbuild";
-import { readdirSync, mkdirSync, copyFileSync, readFileSync } from "fs";
+import { readFile, writeFile, readdir, mkdir } from "fs/promises";
+import { createHash } from "crypto";
+import { rollup } from "rollup";
+import esbuildPlugin from "rollup-plugin-esbuild";
+import nodeResolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
 
-const PLUGINS_DIR = "plugins";
+for (let plug of await readdir("./plugins")) {
+  const manifest = JSON.parse(await readFile(`./plugins/${plug}/manifest.json`));
+  const outPath  = `./dist/${plug}/index.js`;
 
-for (const pluginFolder of readdirSync(PLUGINS_DIR)) {
-  const manifestPath = `${PLUGINS_DIR}/${pluginFolder}/manifest.json`;
-  const manifest     = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  try {
+    const bundle = await rollup({
+      input:   `./plugins/${plug}/${manifest.main}`,
+      onwarn:  () => {},
+      plugins: [
+        nodeResolve(),
+        commonjs(),
+        esbuildPlugin({
+          target: "esnext",
+          minify: true,
+        }),
+      ],
+    });
 
-  console.log(`Building ${manifest.name}...`);
+    await mkdir(`./dist/${plug}`, { recursive: true });
 
-  const outDir = `dist/${pluginFolder}`;
-  mkdirSync(outDir, { recursive: true });
+    await bundle.write({
+      file: outPath,
+      globals(id) {
+        if (id.startsWith("@vendetta"))
+          return id.substring(1).replace(/\//g, ".");
+        const map = { react: "window.React" };
+        return map[id] || null;
+      },
+      format:  "iife",
+      compact: true,
+      exports: "named",
+    });
 
-  await build({
-    entryPoints: [`${PLUGINS_DIR}/${pluginFolder}/src/index.ts`],
-    bundle:      true,
-    format:      "iife",
-    target:      "esnext",
-    outfile:     `${outDir}/index.js`,
-    external:    ["@vendetta", "@vendetta/*"],
-    jsx:         "transform",
-    jsxFactory:  "React.createElement",
-    jsxFragment: "React.Fragment",
-    minify:      true,
-  });
+    await bundle.close();
 
-  copyFileSync(manifestPath, `${outDir}/manifest.json`);
-  console.log(`  → dist/${pluginFolder}/`);
+    const toHash  = await readFile(outPath);
+    manifest.hash = createHash("sha256").update(toHash).digest("hex");
+    manifest.main = "index.js";
+
+    await writeFile(`./dist/${plug}/manifest.json`, JSON.stringify(manifest));
+
+    console.log(`Successfully built ${manifest.name}!`);
+  } catch (e) {
+    console.error("Failed to build plugin...", e);
+    process.exit(1);
+  }
 }
-
-console.log("Done.");
