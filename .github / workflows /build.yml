@@ -1,37 +1,32 @@
-name: Build & Deploy Plugin
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install dependencies
-        run: npm install
-      - name: Build plugins
-        run: npm run build
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
-    needs: build
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+import { build } from "esbuild";
+import { readdirSync, mkdirSync, copyFileSync, readFileSync } from "fs";
+
+const PLUGINS_DIR = "plugins";
+
+for (const pluginFolder of readdirSync(PLUGINS_DIR)) {
+  const manifestPath = `${PLUGINS_DIR}/${pluginFolder}/manifest.json`;
+  const manifest     = JSON.parse(readFileSync(manifestPath, "utf-8"));
+
+  console.log(`Building ${manifest.name}...`);
+
+  const outDir = `dist/${pluginFolder}`;
+  mkdirSync(outDir, { recursive: true });
+
+  await build({
+    entryPoints: [`${PLUGINS_DIR}/${pluginFolder}/src/index.ts`],
+    bundle:      true,
+    format:      "cjs",
+    target:      "esnext",
+    outfile:     `${outDir}/index.js`,
+    external:    ["@vendetta", "@vendetta/*"],
+    jsx:         "transform",
+    jsxFactory:  "React.createElement",
+    jsxFragment: "React.Fragment",
+    minify:      false,
+  });
+
+  copyFileSync(manifestPath, `${outDir}/manifest.json`);
+  console.log(`  → dist/${pluginFolder}/`);
+}
+
+console.log("Done.");
