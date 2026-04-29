@@ -1,6 +1,6 @@
 {
   "name": "PersistentMessageLogger",
-  "description": "Test build",
+  "description": "Logs deleted messages persistently.",
   "authors": [{ "name": "YourName", "id": "YourDiscordUserID" }],
   "main": "src/index.ts",
   "hash": ""
