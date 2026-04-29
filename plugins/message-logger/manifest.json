@@ -1,7 +1,9 @@
 {
   "name": "PersistentMessageLogger",
   "description": "Logs deleted messages persistently.",
-  "authors": [{ "name": "YourName", "id": "YourDiscordUserID" }],
-  "main": "src/index.ts",
-  "hash": ""
+  "authors": [
+    { "name": "king", "id": "0" }
+  ],
+  "main": "index.js",
+  "hash": "pml-fixed-v1"
 }
